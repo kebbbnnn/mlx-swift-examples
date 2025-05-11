@@ -355,12 +355,24 @@ public struct TokenIterator: Sequence, IteratorProtocol {
         return y
     }
 
+    /// A direct wrapper around the model’s low-level call to get logits & new state.
+    /// This mirrors what a `PreTrainedModel.forward` does in Python.
+    mutating public func forward(_ input: LMInput.Text? = nil) -> LMOutput {
+        let input = input ?? y
+        // 1) add batch dimension and invoke the underlying model
+        let batched = input[text: .newAxis]
+        let output = model(batched, cache: cache.isEmpty ? nil : cache, state: state)
+        
+        // 2) update our iterator’s state & cache for next time
+        self.state = output.state
+        
+        return output
+    }
+    
     /// Evaluate the next token and return the new token (y), updating cache state
     mutating func step(previous: LMInput.Text) -> MLXArray {
-        let result = model(
-            previous[text: .newAxis], cache: cache.isEmpty ? nil : cache, state: state)
-        self.state = result.state
-
+        // now explicitly use our forward(_:)-wrapper
+        let result = forward(previous)
         return convertToToken(logits: result.logits)
     }
 
